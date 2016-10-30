@@ -19,8 +19,6 @@ const char *AP_PASS = "p@ssw0rd";
 
 #define BUFFER_SIZE 100
 
-const char* TARGET_URL = "/devices/";
-
 WiFiClientSecure tlsClient;
 AzureIoTHubMQTTClient client(tlsClient, IOTHUB_HOSTNAME, DEVICE_ID, DEVICE_KEY);
 
