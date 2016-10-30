@@ -12,6 +12,7 @@ AzureIoTHubMQTTClient::AzureIoTHubMQTTClient(Client& c, String iotHubHostName, S
         iotHubHostName_(iotHubHostName), deviceId_(deviceId), deviceKey_(deviceKey), PubSubClient(c, iotHubHostName, 8883) {
 
     mqttCommandSubscribeTopic_ = "devices/" + deviceId + "/messages/devicebound/#";
+    mqttCommandPublishTopic_ = "devices/" + deviceId + "/messages/events/";
 }
 
 AzureIoTHubMQTTClient::~AzureIoTHubMQTTClient() {
@@ -54,16 +55,28 @@ bool AzureIoTHubMQTTClient::connect() {
 
     char *devKey = (char *)deviceKey_.c_str();
 
+    //TODO: Optimize this so that we don't have to recreate SAS Token on every connection attempt
     String sas = createIotHubSas(devKey, url);
     String mqttPassword = "SharedAccessSignature " + sas;
-    Serial.println(mqttPassword);
+    //Serial.println(mqttPassword);
 
-    bool ret = PubSubClient::connect(MQTT::Connect(deviceId_).set_keepalive(5).set_auth(mqttUname, mqttPassword).set_clean_session());
+    MQTT::Connect conn = MQTT::Connect(deviceId_).set_auth(mqttUname, mqttPassword);//.set_clean_session();
+    bool ret = PubSubClient::connect(conn);
 
     if (ret) {
-        PubSubClient::subscribe(MQTT::Subscribe().add_topic(mqttCommandSubscribeTopic_));
+        //Directly subscribe
+        PubSubClient::subscribe(mqttCommandSubscribeTopic_);
+
         return true;
     } else {
         return false;
     }
+}
+
+bool AzureIoTHubMQTTClient::publishToDefaultTopic(String payload) {
+    return PubSubClient::publish(mqttCommandPublishTopic_, payload);
+}
+
+bool AzureIoTHubMQTTClient::publishToDefaultTopic(const uint8_t *payload, uint32_t plength, bool retained) {
+    return PubSubClient::publish(mqttCommandPublishTopic_, payload, plength, retained);
 }

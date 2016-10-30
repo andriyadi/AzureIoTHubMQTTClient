@@ -13,11 +13,14 @@ public:
     ~AzureIoTHubMQTTClient();
 
     bool connect();
+    bool publishToDefaultTopic(String payload);
+    bool publishToDefaultTopic(const uint8_t *payload, uint32_t plength, bool retained = false);
+
 private:
     String iotHubHostName_;
     String deviceId_;
     String deviceKey_;
-    String mqttCommandSubscribeTopic_;
+    String mqttCommandSubscribeTopic_, mqttCommandPublishTopic_;
 
     String createIotHubSas(char *key, String url);
 };
