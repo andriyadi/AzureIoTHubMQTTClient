@@ -49,7 +49,7 @@ String AzureIoTHubMQTTClient::createIotHubSas(char *key, String url){
 
 bool AzureIoTHubMQTTClient::connect() {
 
-    String mqttUname =  iotHubHostName_ + "/" + deviceId_;
+    String mqttUname =  iotHubHostName_ + "/" + deviceId_ + "/DeviceClientType=0.1.0";
     String url = iotHubHostName_ + urlEncode(String("/devices/" + deviceId_).c_str());
     url.toLowerCase();
 
@@ -64,8 +64,17 @@ bool AzureIoTHubMQTTClient::connect() {
     bool ret = PubSubClient::connect(conn);
 
     if (ret) {
+
+        PubSubClient::callback_t cb = [=](const MQTT::Publish& p){
+            _onActualMqttMessageCallback(p);
+        };
+
+        set_callback(cb);
+
         //Directly subscribe
         PubSubClient::subscribe(mqttCommandSubscribeTopic_);
+        //MQTT::Subscribe sub = MQTT::Subscribe(mqttCommandSubscribeTopic_, 1);
+        //PubSubClient::subscribe(sub);
 
         return true;
     } else {
@@ -73,10 +82,41 @@ bool AzureIoTHubMQTTClient::connect() {
     }
 }
 
-bool AzureIoTHubMQTTClient::publishToDefaultTopic(String payload) {
-    return PubSubClient::publish(mqttCommandPublishTopic_, payload);
+bool AzureIoTHubMQTTClient::sendEvent(String payload) {
+    //return PubSubClient::publish(mqttCommandPublishTopic_, payload);
+    return PubSubClient::publish(MQTT::Publish(mqttCommandPublishTopic_, payload).set_qos(1).set_retain(false));
 }
 
-bool AzureIoTHubMQTTClient::publishToDefaultTopic(const uint8_t *payload, uint32_t plength, bool retained) {
+bool AzureIoTHubMQTTClient::sendEvent(const uint8_t *payload, uint32_t plength, bool retained) {
     return PubSubClient::publish(mqttCommandPublishTopic_, payload, plength, retained);
+}
+
+void AzureIoTHubMQTTClient::sendEventWithKeyVal(JsonKeyValueMap keyValMap) {
+    if (keyValMap.size() == 0) {
+        return;
+    }
+
+    const int BUFFER_SIZE = JSON_OBJECT_SIZE(MAX_JSON_OBJECT_SIZE);
+    StaticJsonBuffer<BUFFER_SIZE> jsonBuffer;
+    JsonObject &root = jsonBuffer.createObject();
+
+    for (const auto &keyVal: keyValMap) {
+        root[keyVal.first] = keyVal.second;
+    }
+
+    String jsonStr;
+    root.printTo(jsonStr);
+    Serial.println(jsonStr);
+
+    sendEvent(jsonStr);
+}
+
+void AzureIoTHubMQTTClient::_onActualMqttMessageCallback(const MQTT::Publish &publish) {
+
+    //Do something here?
+
+    //Last resort
+    if (onSubscribeCallback_) {
+        onSubscribeCallback_(publish);
+    }
 }

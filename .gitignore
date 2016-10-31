@@ -2,4 +2,5 @@
 CMakeListsPrivate.txt
 .piolibdeps
 /src/MqttAzureIotHub.cpp
+/src/MqttAzureIotHub.cpp.backup
 .idea/

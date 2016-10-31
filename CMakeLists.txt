@@ -45,4 +45,7 @@ add_custom_target(
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/.piolibdeps/NtpClientLib_ID727/src")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/.piolibdeps/Time_ID44")
+
 add_executable(${PROJECT_NAME} ${SRC_LIST})

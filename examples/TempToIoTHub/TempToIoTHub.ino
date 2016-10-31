@@ -4,16 +4,16 @@
 
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
-#include "Adafruit_BMP085.h"
-#include "AzureIoTHubMQTTClient.h"
+#include <AzureIoTHubMQTTClient.h>
+#include <NtpClientLib.h>
 
-const char *AP_SSID = "Andromax-M3Y-C634";
-const char *AP_PASS = "p@ssw0rd";
+const char *AP_SSID = "[YOUR_SSID_NAME]";
+const char *AP_PASS = "[YOUR_SSID_PASS]";
 
-// Azure IoT Hub Settings
-#define IOTHUB_HOSTNAME         "TesterIoTHub.azure-devices.net"
-#define DEVICE_ID               "espectro-01"
-#define DEVICE_KEY              "0qLLMH6FD6oh1HaUHr2wNMsDuSBBiZIiPGwYHe0/ZAs="
+// Azure IoT Hub Settings --> CHANGE THESE
+#define IOTHUB_HOSTNAME         "[YOUR_IOTHUB_NAME].azure-devices.net"
+#define DEVICE_ID               "[YOUR_DEVICE_ID]"
+#define DEVICE_KEY              "[YOUR_DEVICE_KEY]" //Primary key of the device
 
 #define USE_BMP180              1
 
@@ -23,13 +23,14 @@ WiFiClientSecure tlsClient;
 AzureIoTHubMQTTClient client(tlsClient, IOTHUB_HOSTNAME, DEVICE_ID, DEVICE_KEY);
 
 #if USE_BMP180
+#include <Adafruit_BMP085.h>
 Adafruit_BMP085 bmp;
 #endif
 
+const int LED_PIN = 15; //Pin to turn on/of LED a command from IoT Hub
 unsigned long lastMillis = 0;
-unsigned long startMilis = 1477725780;
 
-void connectMqtt(); // <- predefine connect() for setup()
+void connect(); // <- predefine connect() for setup()
 
 //void onSTAGotIP(WiFiEventStationModeGotIP ipInfo) {
 //    Serial.printf("Got IP: %s\r\n", ipInfo.ip.toString().c_str());
@@ -45,6 +46,9 @@ void setup() {
     Serial.begin(115200);
     Serial.setDebugOutput(true);
 
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, LOW);
+
 //    static WiFiEventHandler e1, e2;
 
 #if USE_BMP180
@@ -53,36 +57,66 @@ void setup() {
     }
 #endif
 
-    WiFi.begin(AP_SSID, AP_PASS);
-
 //    WiFi.onEvent([](WiFiEvent_t e) {
 //        Serial.printf("Event wifi -----> %d\n", e);
 //    });
 //    e1 = WiFi.onStationModeGotIP(onSTAGotIP);// As soon WiFi is connected, start NTP Client
 //    e2 = WiFi.onStationModeDisconnected(onSTADisconnected);
 
-    connectMqtt();
-}
-
-void mqttCallback(const MQTT::Publish& pub) {
-
-    Serial.print(pub.topic());
-    Serial.println(" => ");
-    if (pub.has_stream()) {
-        uint8_t buf[BUFFER_SIZE];
-        int read;
-        while (read = pub.payload_stream()->read(buf, BUFFER_SIZE)) {
-            Serial.write(buf, read);
+    NTP.onNTPSyncEvent([](NTPSyncEvent_t ntpEvent) {
+        if (ntpEvent) {
+            Serial.print("Time Sync error: ");
+            if (ntpEvent == noResponse)
+                Serial.println("NTP server not reachable");
+            else if (ntpEvent == invalidAddress)
+                Serial.println("Invalid NTP server address");
         }
-        pub.payload_stream()->stop();
-        Serial.println("");
-    } else {
-        Serial.println(pub.payload_string());
-    }
+        else {
+            Serial.print("Got NTP time: ");
+            Serial.println(NTP.getTimeDateString(NTP.getLastNTPSync()));
+        }
+    });
+
+    connect();
 }
 
-void connectMqtt() {
+void onMessageCallback(const MQTT::Publish& msg) {
+
+    if (msg.payload_len() == 0) {
+        return;
+    }
+
+    //Serial.println(msg.payload_string());
+
+    //Parse message JSON
+    StaticJsonBuffer<200> jsonBuffer;
+    JsonObject& json = jsonBuffer.parseObject((char*)msg.payload(), 3);
+    if (json.success()) {
+        if (strcmp(json["Name"].asString(), "ActivateRelay") >= 0) {
+            auto params = json["Parameters"];
+            auto isAct = (params["Activated"]);
+            if (isAct) {
+                Serial.println("Activated true");
+                digitalWrite(LED_PIN, HIGH);
+            }
+            else {
+                Serial.println("Activated false");
+                digitalWrite(LED_PIN, LOW);
+            }
+        }
+        else {
+            Serial.print("Command name: ");
+            Serial.println(json["Name"].asString());
+        }
+    }
+
+}
+
+void connect() {
+
     Serial.print("Connecting to WiFi...");
+    WiFi.begin(AP_SSID, AP_PASS);
+
     while (WiFi.status() != WL_CONNECTED) {
         Serial.print(".");
         delay(500);
@@ -97,13 +131,16 @@ void connectMqtt() {
     if (client.connect()) {
 
         Serial.println("Connected to MQTT");
-        client.set_callback(mqttCallback);
+        client.onMessage(onMessageCallback);
 
         //client.subscribe(MQTT::Subscribe().add_topic(MQTT_SUBSCRIBE_TOPIC));
 
     } else {
         Serial.println("Could not connect to MQTT");
     }
+
+    NTP.begin("pool.ntp.org", 1, true);
+    NTP.setInterval(63);
 }
 
 void readSensor(float *temp, float *press) {
@@ -124,23 +161,28 @@ void loop() {
         client.loop();
 
         // publish a message roughly every 3 second.
-        if(millis() - lastMillis > 3000) {
+        if(millis() - lastMillis > 3000 && timeStatus() != timeNotSet) {
             lastMillis = millis();
 
             //Read the actual temperature from sensor
             float temp, press;
             readSensor(&temp, &press);
 
-            startMilis += 3; //TODO: get actual timestamp
-            String payload = "{\"MTemperature\":" + String(temp) + ", \"EventTime\":" + String(startMilis) + "}";
-            Serial.println(payload);
+            time_t currentTime = now();
 
-            //client.publish(MQTT::Publish("devices/" + String(DEVICE_ID) + "/messages/events/", payload).set_qos(1));
-            client.publishToDefaultTopic(payload);
+//            String payload = "{\"DeviceId\":\"" + String(DEVICE_ID) + "\", \"MTemperature\":" + String(temp) + ", \"EventTime\":" + String(currentTime) + "}";
+//            Serial.println(payload);
+//
+//            //client.publish(MQTT::Publish("devices/" + String(DEVICE_ID) + "/messages/events/", payload).set_qos(1));
+//            client.publishToDefaultTopic(payload);
+
+            AzureIoTHubMQTTClient::JsonKeyValueMap keyVal = {{"MTemperature", temp}, {"DeviceId", DEVICE_ID}, {"EventTime", currentTime}};
+
+            client.sendEventWithKeyVal(keyVal);
         }
     }
     else {
-        connectMqtt();
+        connect();
         return;
     }
 
