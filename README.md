@@ -3,6 +3,9 @@ It's unofficial Azure IoT Hub client library for ESP8266. The main class `AzureI
 
 [PubSubClient](https://github.com/Imroy/pubsubclient) I use is the one that's optimized for ESP8266, and I included all classes in this project to ease the pain, hope it's OK. 
 
+I try to write the client library to be as familiar as possible. I name the method `sendEvent` instead of `publish`, so it's similar as another Azure IoT Hub client library. If you're familiar with MQTT, you know you should use `topic` in order to publish payload to MQTT broker. But since supported topic on Azure IoT Hub is specific, you can't use arbitrary topic, library sets it for you.
+
+
 ## Why?
 You know how hard/cryptic Azure IoT Hub client for Arduino (and ESP8266) is, right? Well, at least to me. It's written in C (remember [the song](https://www.youtube.com/watch?v=wJ81MZUlrDo)?).
 
