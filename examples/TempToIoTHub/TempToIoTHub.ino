@@ -88,7 +88,9 @@ void onMessageCallback(const MQTT::Publish& msg) {
 
     //Serial.println(msg.payload_string());
 
-    //Parse message JSON
+    //Parse cloud-to-device message JSON. In this example, I send the command message with following format:
+    //{"Name":"ActivateRelay","Parameters":{"Activated":0}}
+
     StaticJsonBuffer<200> jsonBuffer;
     JsonObject& json = jsonBuffer.parseObject((char*)msg.payload(), 3);
     if (json.success()) {
@@ -97,7 +99,7 @@ void onMessageCallback(const MQTT::Publish& msg) {
             auto isAct = (params["Activated"]);
             if (isAct) {
                 Serial.println("Activated true");
-                digitalWrite(LED_PIN, HIGH);
+                digitalWrite(LED_PIN, HIGH); //visualize relay activation with the LED
             }
             else {
                 Serial.println("Activated false");
@@ -123,17 +125,12 @@ void connect() {
     }
 
     Serial.print("\nConnecting to MQTT...");
-//    while (!client.connect(DEVICE_ID, MQTT_USERNAME, mqttPassword.c_str())) {
-//        Serial.print(".");
-//        delay(500);
-//    }
-
     if (client.connect()) {
 
         Serial.println("Connected to MQTT");
-        client.onMessage(onMessageCallback);
 
-        //client.subscribe(MQTT::Subscribe().add_topic(MQTT_SUBSCRIBE_TOPIC));
+        //Add the callback to process cloud-to-device message
+        client.onMessage(onMessageCallback);
 
     } else {
         Serial.println("Could not connect to MQTT");
@@ -160,7 +157,7 @@ void loop() {
     if (client.connected()) {
         client.loop();
 
-        // publish a message roughly every 3 second.
+        // Publish a message roughly every 3 second. Only after time is set properly.
         if(millis() - lastMillis > 3000 && timeStatus() != timeNotSet) {
             lastMillis = millis();
 
@@ -168,16 +165,18 @@ void loop() {
             float temp, press;
             readSensor(&temp, &press);
 
+            //Get current timestamp, using NTPClientLib
             time_t currentTime = now();
 
+            // You can do this to publish payload to IoT Hub
 //            String payload = "{\"DeviceId\":\"" + String(DEVICE_ID) + "\", \"MTemperature\":" + String(temp) + ", \"EventTime\":" + String(currentTime) + "}";
 //            Serial.println(payload);
 //
 //            //client.publish(MQTT::Publish("devices/" + String(DEVICE_ID) + "/messages/events/", payload).set_qos(1));
-//            client.publishToDefaultTopic(payload);
+//            client.sendEvent(payload);
 
+            //Or instead, use this convenient way
             AzureIoTHubMQTTClient::JsonKeyValueMap keyVal = {{"MTemperature", temp}, {"DeviceId", DEVICE_ID}, {"EventTime", currentTime}};
-
             client.sendEventWithKeyVal(keyVal);
         }
     }
