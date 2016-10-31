@@ -24,7 +24,10 @@ Then, download this library and add to your Arduino IDE like usual. To get start
 * `[YOUR_DEVICE_ID]`
 * `[YOUR_DEVICE_KEY]`
 
-Upload the sketch to your ESP8266 board, of course I'll recommend to use my company's ESP8266-based dev board: [ESPectro](http://makestro.com/espectro). 
-And (hopefully) you're good to go.
+In the example sketch I use [NTPClientLib](https://github.com/gmag11/NtpClient) in order to get the real timestamp. Follow NTPClientLib instruction to use it.
+
+Upload the sketch to your ESP8266 board. Of course I'll recommend to use my company's ESP8266-based dev board: [ESPectro](http://makestro.com/espectro), it will make your maker life easier :P
+
+And after that, (hopefully) you're good to go. Hey, would be great if you can connect a temperature sensor as the sketch is about reading temperature data and publish it to Azure IoT Hub. I use BMP180 and [Adafruit's BMP085/BMP180 library](https://github.com/adafruit/Adafruit-BMP085-Library). You can change `#define USE_BMP180` to `0` if you don't have the sensor and let the random on your side.
 
 Enjoy!
