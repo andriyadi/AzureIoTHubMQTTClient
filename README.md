@@ -1,7 +1,7 @@
 # AzureIoTHubMQTTClient
-It's unofficial Azure IoT Hub client library for ESP8266. The main class `AzureIoTHubMQTTClient` extends `PubSubClient` class in order to access Azure IoT Hub using MQTT protocol. 
+It's unofficial Azure IoT Hub client library for **ESP8266**. The main class `AzureIoTHubMQTTClient` extends `PubSubClient` class in order to access Azure IoT Hub using MQTT protocol. 
 
-[PubSubClient](https://github.com/Imroy/pubsubclient) I use is the one that's optimized for ESP8266, and I included all classes in this project to ease the pain, hope it's OK. 
+[PubSubClient](https://github.com/Imroy/pubsubclient) I use is the one that's optimized for ESP8266, and I included all classes into this project to ease the pain, hope it's OK. 
 
 I try to write the client library to be as familiar as possible. I name the method `sendEvent` instead of `publish`, so it's similar as another Azure IoT Hub client library. If you're familiar with MQTT, you know you should use `topic` in order to publish payload to MQTT broker. But since supported topic on Azure IoT Hub is specific, you can't use arbitrary topic, library sets it for you.
 
@@ -13,14 +13,23 @@ Hey, Azure IoT Hub already supports MQTT protocol since the GA, doesn't it? Why 
 
 I took a liberty to write an easy to use class `AzureIoTHubMQTTClient`, all you need to provide are:
 
-* Azure IoT Hub name
-* Device ID
+* Azure IoT Hub name --> the name you use to create the IoT Hub
+* Device ID --> the ID you use to register a device, either via `DeviceExplorer` or `iothub-explorer`
 * Device Key --> the primary key that you can get using DeviceExplorer app or using `iothub-explorer get "[device_id]" --connection-string`
 
 
 ## Get started
 First thing first, you should have already set up an Azure IoT Hub and add a device. To create your Microsoft Azure IoT Hub and add a device, follow the instructions outlined in the [Setup IoT Hub Microsoft Azure Iot SDK page](https://github.com/Azure/azure-iot-sdks/blob/master/doc/setup_iothub.md).
-Then, download this library and add to your Arduino IDE like usual. To get started, just take a look the example `TempToIoTHub.ino` sketch. Change following:
+Then, download this library and add to your Arduino IDE like usual. Along with that, you install following dependency libraries, either manually or via Library Manager:
+
+* ArduinoJson: https://github.com/bblanchon/ArduinoJson
+
+If you need to deal with date and time, you should also install:
+
+* Time: https://github.com/michaelmargolis/arduino_time
+* NTPClientLib: https://github.com/gmag11/NtpClient
+ 
+To get started, just take a look the example `TempToIoTHub.ino` sketch. Change the followings:
 
 * `[YOUR_SSID_NAME]` and `[YOUR_SSID_PASS]` to connect to WiFi
 * `[YOUR_IOTHUB_NAME]`
@@ -29,9 +38,9 @@ Then, download this library and add to your Arduino IDE like usual. To get start
 
 In the example sketch I use [NTPClientLib](https://github.com/gmag11/NtpClient) in order to get the real timestamp. Follow NTPClientLib instruction to use it.
 
-Upload the sketch to your ESP8266 board. Of course I'll recommend to use my company's ESP8266-based dev board: [ESPectro](http://makestro.com/espectro), it will make your maker life easier :P
+Upload the sketch to your ESP8266 board. I'll recommend to use the ESP8266-based dev board designed by my team: [ESPectro](http://makestro.com/espectro), it will make your maker life easier :P
 
-And after that, (hopefully) you're good to go. Hey, would be great if you can connect a temperature sensor as the sketch is about reading temperature data and publish it to Azure IoT Hub. I use BMP180 and [Adafruit's BMP085/BMP180 library](https://github.com/adafruit/Adafruit-BMP085-Library). You can change `#define USE_BMP180` to `0` if you don't have the sensor and let the random on your side.
+And after that, (hopefully) you're good to go. Hey, would be great if you can connect a temperature sensor as the sketch is about reading temperature data and publish it to Azure IoT Hub. I use BMP180 and [Adafruit's BMP085/BMP180 library](https://github.com/adafruit/Adafruit-BMP085-Library). You can change `#define USE_BMP180` from `1` to `0` if you don't have the sensor and let the random on your side.
 
 Enjoy!
 
