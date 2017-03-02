@@ -20,17 +20,20 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #include "MQTT.h"
 
 namespace MQTT {
-  // First some convenience functions
+  //! Write a 16-bit value, big-endian order
   void write(uint8_t *buf, uint32_t& bufpos, uint16_t data) {
     buf[bufpos++] = data >> 8;
     buf[bufpos++] = data & 0xff;
   }
 
-  void write(uint8_t *buf, uint32_t& bufpos, uint8_t *data, uint32_t dlen) {
+  //! Write an arbitrary chunk of data, with 16-bit length first
+  void write(uint8_t *buf, uint32_t& bufpos, uint8_t *data, uint16_t dlen) {
+    write(buf, bufpos, dlen);
     memcpy(buf + bufpos, data, dlen);
     bufpos += dlen;
   }
 
+  //! Write a string, with 16-bit length first
   void write(uint8_t *buf, uint32_t& bufpos, String str) {
     const char* c = str.c_str();
     uint32_t length_pos = bufpos;
@@ -41,6 +44,11 @@ namespace MQTT {
       count++;
     }
     write(buf, length_pos, count);
+  }
+
+  void write_bare_payload(uint8_t *buf, uint32_t& bufpos, uint8_t *data, uint32_t dlen) {
+    memcpy(buf + bufpos, data, dlen);
+    bufpos += dlen;
   }
 
   //! Template function to read from a buffer
@@ -271,8 +279,44 @@ namespace MQTT {
     Message(CONNECT),
     _clean_session(true),
     _clientid(cid),
+    _will_message(NULL), _will_message_len(0),
     _keepalive(MQTT_KEEPALIVE)
   {}
+
+  Connect& Connect::set_will(String willTopic, String willMessage, uint8_t willQos, bool willRetain) {
+    _will_topic = willTopic;
+    _will_qos = willQos;
+    _will_retain = willRetain;
+
+    if (_will_message != NULL)
+      delete [] _will_message;
+
+    _will_message_len = willMessage.length();
+    _will_message = new uint8_t[_will_message_len];
+    memcpy(_will_message, willMessage.c_str(), _will_message_len);
+
+    return *this;
+  }
+
+  Connect& Connect::set_will(String willTopic, uint8_t *willMessage, uint16_t willMessageLength, uint8_t willQos, bool willRetain) {
+    _will_topic = willTopic;
+    _will_qos = willQos;
+    _will_retain = willRetain;
+
+    if (_will_message != NULL)
+      delete [] _will_message;
+
+    _will_message_len = willMessageLength;
+    _will_message = new uint8_t[_will_message_len];
+    memcpy(_will_message, willMessage, _will_message_len);
+
+    return *this;
+  }
+
+  Connect::~Connect() {
+    if (_will_message != NULL)
+      delete [] _will_message;
+  }
 
   uint32_t Connect::variable_header_length(void) const {
     return 10;
@@ -310,7 +354,7 @@ namespace MQTT {
     uint32_t len = 2 + _clientid.length();
     if (_will_topic.length()) {
       len += 2 + _will_topic.length();
-      len += 2 + _will_message.length();
+      len += 2 + _will_message_len;
     }
     if (_username.length()) {
       len += 2 + _username.length();
@@ -325,7 +369,7 @@ namespace MQTT {
 
     if (_will_topic.length()) {
       write(buf, bufpos, _will_topic);
-      write(buf, bufpos, _will_message);
+      write(buf, bufpos, _will_message, _will_message_len);
     }
 
     if (_username.length()) {
@@ -466,7 +510,7 @@ namespace MQTT {
 
   void Publish::write_payload(uint8_t *buf, uint32_t& bufpos) const {
     if (_payload != NULL)
-      write(buf, bufpos, _payload, _payload_len);
+      write_bare_payload(buf, bufpos, _payload, _payload_len);
   }
 
   message_type Publish::response_type(void) const {
@@ -544,7 +588,7 @@ namespace MQTT {
 
   // PublishComp class
   PublishComp::PublishComp(uint16_t pid) :
-    Message(PUBREC)
+    Message(PUBCOMP)
   {
     _packet_id = pid;
   }
@@ -607,7 +651,8 @@ namespace MQTT {
   }
 
   void Subscribe::write_payload(uint8_t *buf, uint32_t& bufpos) const {
-    write(buf, bufpos, _buffer, _buflen);
+    if (_buffer != NULL)
+      write_bare_payload(buf, bufpos, _buffer, _buflen);
   }
 
 
@@ -691,7 +736,8 @@ namespace MQTT {
   }
 
   void Unsubscribe::write_payload(uint8_t *buf, uint32_t& bufpos) const {
-    write(buf, bufpos, _buffer, _buflen);
+    if (_buffer != NULL)
+      write_bare_payload(buf, bufpos, _buffer, _buflen);
   }
 
 

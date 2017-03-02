@@ -7,20 +7,98 @@
 #include "sha256.h"
 #include "Base64.h"
 #include "Utils.h"
+#include <ESP8266WiFi.h>
 
 AzureIoTHubMQTTClient::AzureIoTHubMQTTClient(Client& c, String iotHubHostName, String deviceId, String deviceKey):
-        iotHubHostName_(iotHubHostName), deviceId_(deviceId), deviceKey_(deviceKey), PubSubClient(c, iotHubHostName, 8883) {
+        iotHubHostName_(iotHubHostName), deviceId_(deviceId), deviceKey_(deviceKey), PubSubClient(c, iotHubHostName, AZURE_IOTHUB_MQTT_PORT) {
 
     mqttCommandSubscribeTopic_ = "devices/" + deviceId + "/messages/devicebound/#";
     mqttCommandPublishTopic_ = "devices/" + deviceId + "/messages/events/";
+
+    using namespace std::placeholders;
+    NTP.onNTPSyncEvent(std::bind(&AzureIoTHubMQTTClient::onNTPSynced, this, _1));
 }
 
 AzureIoTHubMQTTClient::~AzureIoTHubMQTTClient() {
 
 }
 
-String AzureIoTHubMQTTClient::createIotHubSas(char *key, String url){
-    String stringToSign = url + "\n" + 1737504000;
+void AzureIoTHubMQTTClient::onNTPSynced(NTPSyncEvent_t ntpEvent) {
+    if (ntpEvent) {
+        DEBUGLOG("Time Sync error: ");
+        if (ntpEvent == noResponse) {
+            DEBUGLOG("NTP server not reachable\n");
+        }
+        else if (ntpEvent == invalidAddress) {
+            DEBUGLOG("Invalid NTP server address\n");
+        }
+
+        NTP.setInterval(5); //try again soon
+
+//        ntpTrialCount_++;
+//        if (ntpTrialCount_ > 3) {
+//        }
+
+    }
+    else {
+        ntpSyncedFlag = true;
+        DEBUGLOG("Got NTP time: ");
+        DEBUGLOG("%s\n", NTP.getTimeDateString(NTP.getLastNTPSync()).c_str());
+        NTP.setInterval(61);
+
+        changeEventTo(AzureIoTHubMQTTClientEventNTPSynced);
+
+    }
+
+    DEBUGLOG("Current timestamp: %d\n", now());
+}
+
+bool AzureIoTHubMQTTClient::begin() {
+
+    if (!WiFi.isConnected())	{
+        DEBUGLOG("NOT connected to internet!\n");
+        return false;
+    }
+
+    NTP.begin(NTP_DEFAULT_HOST);//, 1, true);
+    changeEventTo(AzureIoTHubMQTTClientEventNTPSyncing);
+
+    return true;
+}
+
+void AzureIoTHubMQTTClient::run() {
+
+    //if (ntpSyncedFlag || timeStatus() == timeSet) {
+    if (ntpSyncedFlag && currentEvent_ == AzureIoTHubMQTTClientEventNTPSynced) {
+        ntpSyncedFlag = false;
+
+        if (!connected()) {
+            doConnect();
+        }
+    }
+    else {
+        if (currentEvent_ == AzureIoTHubMQTTClientEventNTPSyncing) {
+            timeStatus();
+        }
+    }
+
+    PubSubClient::loop();
+}
+
+void AzureIoTHubMQTTClient::stop() {
+    //ntpTrialCount_ = 0;
+    disconnect();
+    NTP.stop();
+}
+
+String AzureIoTHubMQTTClient::createIotHubSASToken(char *key, String url, long expire){
+
+    url.toLowerCase();
+    if (expire == 0) {
+        expire = 1737504000; //hardcoded expire
+    }
+
+    String stringToSign = url + "\n" + String(expire);
 
     // START: Create signature
     // https://raw.githubusercontent.com/adamvr/arduino-base64/master/examples/base64/base64.ino
@@ -43,27 +121,38 @@ String AzureIoTHubMQTTClient::createIotHubSas(char *key, String url){
     base64_encode(encodedSign, sign, HASH_LENGTH);
 
     // SharedAccessSignature
-    return "sr=" + url + "&sig="+ urlEncode(encodedSign) + "&se=" + 1737504000;
+    return "sr=" + url + "&sig="+ urlEncode(encodedSign) + "&se=" + String(expire);
     // END: create SAS
 }
 
-bool AzureIoTHubMQTTClient::connect() {
+bool AzureIoTHubMQTTClient::doConnect() {
+
+    if (sasToken_.equals("")) {
+        DEBUGLOG("Creating SAS Token!\n");
+
+        String url = iotHubHostName_ + urlEncode(String("/devices/" + deviceId_).c_str());
+        char *devKey = (char *)deviceKey_.c_str();
+        long expire = (timeStatus() == timeSet? now(): 0) + (AZURE_IOTHUB_TOKEN_EXPIRE);
+        DEBUGLOG("SAS Token expire: %d\n", expire);
+
+        //TODO: Store SAS token? So that no expensive operation for each begin
+        sasToken_ = createIotHubSASToken(devKey, url, expire);
+    }
+
+    changeEventTo(AzureIoTHubMQTTClientEventConnecting);
 
     String mqttUname =  iotHubHostName_ + "/" + deviceId_ + "/DeviceClientType=0.1.0";
-    String url = iotHubHostName_ + urlEncode(String("/devices/" + deviceId_).c_str());
-    url.toLowerCase();
-
-    char *devKey = (char *)deviceKey_.c_str();
-
-    //TODO: Optimize this so that we don't have to recreate SAS Token on every connection attempt
-    String sas = createIotHubSas(devKey, url);
-    String mqttPassword = "SharedAccessSignature " + sas;
-    //Serial.println(mqttPassword);
+    String mqttPassword = "SharedAccessSignature " + sasToken_;
+    //DEBUGLOG(mqttPassword);
 
     MQTT::Connect conn = MQTT::Connect(deviceId_).set_auth(mqttUname, mqttPassword);//.set_clean_session();
+    conn.set_keepalive(10);
     bool ret = PubSubClient::connect(conn);
 
     if (ret) {
+
+        //DEBUGLOG("Connected to Azure IoT Hub\n");
+        changeEventTo(AzureIoTHubMQTTClientEventConnected);
 
         PubSubClient::callback_t cb = [=](const MQTT::Publish& p){
             _onActualMqttMessageCallback(p);
@@ -78,6 +167,8 @@ bool AzureIoTHubMQTTClient::connect() {
 
         return true;
     } else {
+
+        DEBUGLOG("Failed to connect to Azure IoT Hub\n");
         return false;
     }
 }
@@ -91,7 +182,7 @@ bool AzureIoTHubMQTTClient::sendEvent(const uint8_t *payload, uint32_t plength, 
     return PubSubClient::publish(mqttCommandPublishTopic_, payload, plength, retained);
 }
 
-void AzureIoTHubMQTTClient::sendEventWithKeyVal(JsonKeyValueMap keyValMap) {
+void AzureIoTHubMQTTClient::sendEventWithKeyVal(KeyValueMap keyValMap) {
     if (keyValMap.size() == 0) {
         return;
     }
@@ -106,17 +197,70 @@ void AzureIoTHubMQTTClient::sendEventWithKeyVal(JsonKeyValueMap keyValMap) {
 
     String jsonStr;
     root.printTo(jsonStr);
-    Serial.println(jsonStr);
+    DEBUGLOG("JSON: %s\n", jsonStr.c_str());
 
     sendEvent(jsonStr);
 }
 
-void AzureIoTHubMQTTClient::_onActualMqttMessageCallback(const MQTT::Publish &publish) {
+void AzureIoTHubMQTTClient::_onActualMqttMessageCallback(const MQTT::Publish &msg) {
 
-    //Do something here?
+    //Process message
+    if (msg.payload_len() > 0 && parseMessageAsJson_ && commandsHandlerMap_.size() > 0) {
+
+        StaticJsonBuffer<200> jsonBuffer;
+        JsonObject& json = jsonBuffer.parseObject((char*)msg.payload(), 3);
+        if (json.success()) {
+            String key = "";
+            if (json.containsKey("Name")) {
+                key = "Name";
+            }
+            else if (json.containsKey("name")) {
+                key = "name";
+            }
+
+            if (!key.equals("")) {
+                String cmdName = String(json[key].as<char*>());
+
+                for (const auto &myPair : commandsHandlerMap_) {
+                    if (!cmdName.equals(myPair.first)) {
+                        continue;
+                    }
+
+                    DEBUGLOG("Found %s command\n", cmdName.c_str());
+                    AzureIoTHubMQTTClientCommandCallback cb = myPair.second;
+//                    auto val = json[myPair.first];
+//                    cb(myPair.first, val);
+                    cb(myPair.first, json);
+                }
+            }
+        }
+    }
 
     //Last resort
     if (onSubscribeCallback_) {
-        onSubscribeCallback_(publish);
+        onSubscribeCallback_(msg);
+    }
+}
+
+bool AzureIoTHubMQTTClient::setTimeZone(int timeZone) {
+    return NTP.setTimeZone(timeZone);
+}
+
+void AzureIoTHubMQTTClient::onCloudCommand(String command,
+                                           AzureIoTHubMQTTClient::AzureIoTHubMQTTClientCommandCallback callback) {
+
+    parseMessageAsJson_ = true;
+    if (commandsHandlerMap_.size() == 0) {
+    }
+
+    commandsHandlerMap_[command] = callback;
+}
+
+void AzureIoTHubMQTTClient::changeEventTo(AzureIoTHubMQTTClient::AzureIoTHubMQTTClientEvent event) {
+
+    currentEvent_ = event;
+
+    if (eventCallback_) {
+        eventCallback_(event);
     }
 }

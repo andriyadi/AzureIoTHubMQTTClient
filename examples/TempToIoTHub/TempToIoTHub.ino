@@ -5,7 +5,6 @@
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
 #include <AzureIoTHubMQTTClient.h>
-#include <NtpClientLib.h>
 
 const char *AP_SSID = "[YOUR_SSID_NAME]";
 const char *AP_PASS = "[YOUR_SSID_PASS]";
@@ -15,12 +14,13 @@ const char *AP_PASS = "[YOUR_SSID_PASS]";
 #define DEVICE_ID               "[YOUR_DEVICE_ID]"
 #define DEVICE_KEY              "[YOUR_DEVICE_KEY]" //Primary key of the device
 
-#define USE_BMP180              1
+#define USE_BMP180              1 //Set this to 0 if you don't have the sensor and generate random sensor value to publish
 
 #define BUFFER_SIZE 100
 
 WiFiClientSecure tlsClient;
 AzureIoTHubMQTTClient client(tlsClient, IOTHUB_HOSTNAME, DEVICE_ID, DEVICE_KEY);
+WiFiEventHandler  e1, e2;
 
 #if USE_BMP180
 #include <Adafruit_BMP085.h>
@@ -30,20 +30,60 @@ Adafruit_BMP085 bmp;
 const int LED_PIN = 15; //Pin to turn on/of LED a command from IoT Hub
 unsigned long lastMillis = 0;
 
-void connect(); // <- predefine connect() for setup()
+void connectToIoTHub(); // <- predefine connect() for setup()
+void onMessageCallback(const MQTT::Publish& msg);
 
-//void onSTAGotIP(WiFiEventStationModeGotIP ipInfo) {
-//    Serial.printf("Got IP: %s\r\n", ipInfo.ip.toString().c_str());
-//    connectMqtt();
-//}
-//
-//void onSTADisconnected(WiFiEventStationModeDisconnected event_info) {
-//    Serial.printf("Disconnected from SSID: %s\n", event_info.ssid.c_str());
-//    Serial.printf("Reason: %d\n", event_info.reason);
-//}
+void onSTAGotIP(WiFiEventStationModeGotIP ipInfo) {
+    Serial.printf("Got IP: %s\r\n", ipInfo.ip.toString().c_str());
+
+    connectToIoTHub();
+}
+
+void onSTADisconnected(WiFiEventStationModeDisconnected event_info) {
+    Serial.printf("Disconnected from SSID: %s\n", event_info.ssid.c_str());
+    Serial.printf("Reason: %d\n", event_info.reason);
+}
+
+void onClientEvent(const AzureIoTHubMQTTClient::AzureIoTHubMQTTClientEvent event) {
+    if (event == AzureIoTHubMQTTClient::AzureIoTHubMQTTClientEventConnected) {
+
+        Serial.println("Connected to Azure IoT Hub");
+
+        //Add the callback to process cloud-to-device message/command
+        client.onMessage(onMessageCallback);
+    }
+}
+
+void onActivateRelayCommand(String cmdName, JsonVariant jsonValue) {
+
+    //Parse cloud-to-device message JSON. In this example, I send the command message with following format:
+    //{"Name":"ActivateRelay","Parameters":{"Activated":0}}
+
+    JsonObject& jsonObject = jsonValue.as<JsonObject>();
+    if (jsonObject.containsKey("Parameters")) {
+        auto params = jsonValue["Parameters"];
+        auto isAct = (params["Activated"]);
+        if (isAct) {
+            Serial.println("Activated true");
+            digitalWrite(LED_PIN, HIGH); //visualize relay activation with the LED
+        }
+        else {
+            Serial.println("Activated false");
+            digitalWrite(LED_PIN, LOW);
+        }
+    }
+}
 
 void setup() {
+
     Serial.begin(115200);
+
+    while(!Serial) {
+        yield();
+    }
+    delay(1000);
+
+
     Serial.setDebugOutput(true);
 
     pinMode(LED_PIN, OUTPUT);
@@ -57,87 +97,38 @@ void setup() {
     }
 #endif
 
-//    WiFi.onEvent([](WiFiEvent_t e) {
-//        Serial.printf("Event wifi -----> %d\n", e);
-//    });
-//    e1 = WiFi.onStationModeGotIP(onSTAGotIP);// As soon WiFi is connected, start NTP Client
-//    e2 = WiFi.onStationModeDisconnected(onSTADisconnected);
+    Serial.print("Connecting to WiFi...");
+    //Begin WiFi joining with provided Access Point name and password
+    WiFi.begin(AP_SSID, AP_PASS);
 
-    NTP.onNTPSyncEvent([](NTPSyncEvent_t ntpEvent) {
-        if (ntpEvent) {
-            Serial.print("Time Sync error: ");
-            if (ntpEvent == noResponse)
-                Serial.println("NTP server not reachable");
-            else if (ntpEvent == invalidAddress)
-                Serial.println("Invalid NTP server address");
-        }
-        else {
-            Serial.print("Got NTP time: ");
-            Serial.println(NTP.getTimeDateString(NTP.getLastNTPSync()));
-        }
-    });
+    //Handle WiFi events
+    e1 = WiFi.onStationModeGotIP(onSTAGotIP);// As soon WiFi is connected, start the Client
+    e2 = WiFi.onStationModeDisconnected(onSTADisconnected);
 
-    connect();
+    //Handle client events
+    client.onEvent(onClientEvent);
+
+    //Add command to handle and its handler
+    client.onCloudCommand("ActivateRelay", onActivateRelayCommand);
 }
 
 void onMessageCallback(const MQTT::Publish& msg) {
 
-    if (msg.payload_len() == 0) {
-        return;
-    }
+//    if (msg.payload_len() == 0) {
+//        return;
+//    }
 
-    //Serial.println(msg.payload_string());
-
-    //Parse cloud-to-device message JSON. In this example, I send the command message with following format:
-    //{"Name":"ActivateRelay","Parameters":{"Activated":0}}
-
-    StaticJsonBuffer<200> jsonBuffer;
-    JsonObject& json = jsonBuffer.parseObject((char*)msg.payload(), 3);
-    if (json.success()) {
-        if (strcmp(json["Name"].asString(), "ActivateRelay") >= 0) {
-            auto params = json["Parameters"];
-            auto isAct = (params["Activated"]);
-            if (isAct) {
-                Serial.println("Activated true");
-                digitalWrite(LED_PIN, HIGH); //visualize relay activation with the LED
-            }
-            else {
-                Serial.println("Activated false");
-                digitalWrite(LED_PIN, LOW);
-            }
-        }
-        else {
-            Serial.print("Command name: ");
-            Serial.println(json["Name"].asString());
-        }
-    }
-
+//    Serial.println(msg.payload_string());
 }
 
-void connect() {
+void connectToIoTHub() {
 
-    Serial.print("Connecting to WiFi...");
-    WiFi.begin(AP_SSID, AP_PASS);
-
-    while (WiFi.status() != WL_CONNECTED) {
-        Serial.print(".");
-        delay(500);
-    }
-
-    Serial.print("\nConnecting to MQTT...");
-    if (client.connect()) {
-
-        Serial.println("Connected to MQTT");
-
-        //Add the callback to process cloud-to-device message
-        client.onMessage(onMessageCallback);
-
+    Serial.print("\nBeginning Azure IoT Hub Client... ");
+    if (client.begin()) {
+        Serial.println("OK");
     } else {
         Serial.println("Could not connect to MQTT");
     }
-
-    NTP.begin("pool.ntp.org", 1, true);
-    NTP.setInterval(63);
 }
 
 void readSensor(float *temp, float *press) {
@@ -154,8 +145,9 @@ void readSensor(float *temp, float *press) {
 }
 
 void loop() {
+
+    client.run();
     if (client.connected()) {
-        client.loop();
 
         // Publish a message roughly every 3 second. Only after time is set properly.
         if(millis() - lastMillis > 3000 && timeStatus() != timeNotSet) {
@@ -165,23 +157,24 @@ void loop() {
             float temp, press;
             readSensor(&temp, &press);
 
-            //Get current timestamp, using NTPClientLib
+            //Get current timestamp, using Time lib
             time_t currentTime = now();
 
             // You can do this to publish payload to IoT Hub
-//            String payload = "{\"DeviceId\":\"" + String(DEVICE_ID) + "\", \"MTemperature\":" + String(temp) + ", \"EventTime\":" + String(currentTime) + "}";
-//            Serial.println(payload);
-//
-//            //client.publish(MQTT::Publish("devices/" + String(DEVICE_ID) + "/messages/events/", payload).set_qos(1));
-//            client.sendEvent(payload);
+            /*
+            String payload = "{\"DeviceId\":\"" + String(DEVICE_ID) + "\", \"MTemperature\":" + String(temp) + ", \"EventTime\":" + String(currentTime) + "}";
+            Serial.println(payload);
+
+            //client.publish(MQTT::Publish("devices/" + String(DEVICE_ID) + "/messages/events/", payload).set_qos(1));
+            client.sendEvent(payload);
+            */
 
             //Or instead, use this convenient way
-            AzureIoTHubMQTTClient::JsonKeyValueMap keyVal = {{"MTemperature", temp}, {"DeviceId", DEVICE_ID}, {"EventTime", currentTime}};
+            AzureIoTHubMQTTClient::KeyValueMap keyVal = {{"MTemperature", temp}, {"DeviceId", DEVICE_ID}, {"EventTime", currentTime}};
             client.sendEventWithKeyVal(keyVal);
         }
     }
     else {
-        connect();
         return;
     }
 
