@@ -16,8 +16,6 @@ const char *AP_PASS = "[YOUR_SSID_PASS]";
 
 #define USE_BMP180              1 //Set this to 0 if you don't have the sensor and generate random sensor value to publish
 
-#define BUFFER_SIZE 100
-
 WiFiClientSecure tlsClient;
 AzureIoTHubMQTTClient client(tlsClient, IOTHUB_HOSTNAME, DEVICE_ID, DEVICE_KEY);
 WiFiEventHandler  e1, e2;
@@ -30,12 +28,13 @@ Adafruit_BMP085 bmp;
 const int LED_PIN = 15; //Pin to turn on/of LED a command from IoT Hub
 unsigned long lastMillis = 0;
 
-void connectToIoTHub(); // <- predefine connect() for setup()
+void connectToIoTHub(); // <- predefine connectToIoTHub() for setup()
 void onMessageCallback(const MQTT::Publish& msg);
 
 void onSTAGotIP(WiFiEventStationModeGotIP ipInfo) {
     Serial.printf("Got IP: %s\r\n", ipInfo.ip.toString().c_str());
 
+    //do connect upon WiFi connected
     connectToIoTHub();
 }
 
@@ -81,15 +80,12 @@ void setup() {
     while(!Serial) {
         yield();
     }
-    delay(1000);
-
+    delay(2000);
 
     Serial.setDebugOutput(true);
 
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
-
-//    static WiFiEventHandler e1, e2;
 
 #if USE_BMP180
     if (bmp.begin()) {
@@ -109,10 +105,13 @@ void setup() {
     client.onEvent(onClientEvent);
 
     //Add command to handle and its handler
+    //Command format is assumed like this: {"Name":"[COMMAND_NAME]","Parameters":[PARAMETERS_JSON]}
     client.onCloudCommand("ActivateRelay", onActivateRelayCommand);
 }
 
 void onMessageCallback(const MQTT::Publish& msg) {
+
+    //Handle Cloud to Device message by your self.
 
 //    if (msg.payload_len() == 0) {
 //        return;
@@ -146,10 +145,12 @@ void readSensor(float *temp, float *press) {
 
 void loop() {
 
+    //MUST CALL THIS in loop()
     client.run();
+
     if (client.connected()) {
 
-        // Publish a message roughly every 3 second. Only after time is set properly.
+        // Publish a message roughly every 3 second. Only after time is retrieved and set properly.
         if(millis() - lastMillis > 3000 && timeStatus() != timeNotSet) {
             lastMillis = millis();
 
@@ -169,13 +170,13 @@ void loop() {
             client.sendEvent(payload);
             */
 
-            //Or instead, use this convenient way
-            AzureIoTHubMQTTClient::KeyValueMap keyVal = {{"MTemperature", temp}, {"DeviceId", DEVICE_ID}, {"EventTime", currentTime}};
+            //Or instead, use this more convenient way
+            AzureIoTHubMQTTClient::KeyValueMap keyVal = {{"MTemperature", temp}, {"MPressure", press}, {"DeviceId", DEVICE_ID}, {"EventTime", currentTime}};
             client.sendEventWithKeyVal(keyVal);
         }
     }
     else {
-        return;
+
     }
 
     delay(10); // <- fixes some issues with WiFi stability
