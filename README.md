@@ -20,7 +20,7 @@ I took a liberty to write an easy to use class `AzureIoTHubMQTTClient`, all you 
 
 
 ## Get started
-First thing first, you should have already set up an Azure IoT Hub and add a device. To create your Microsoft Azure IoT Hub and add a device, follow the instructions outlined in the [Setup IoT Hub Microsoft Azure Iot SDK page](https://github.com/Azure/azure-iot-sdks/blob/master/doc/setup_iothub.md).
+First thing first, you should have already set up an Azure IoT Hub and add a device. To create your Microsoft Azure IoT Hub and add a device, follow the instructions outlined in the [Setup IoT Hub Microsoft Azure Iot SDK page](https://github.com/Azure/azure-iot-device-ecosystem/blob/master/setup_iothub.md).
 Then, download this library and add to your Arduino IDE like usual. Along with that, you also need to install following dependency libraries, either manually or via Library Manager:
 
 * [ArduinoJson](https://github.com/bblanchon/ArduinoJson)
