@@ -37,6 +37,8 @@ Upload the sketch to your ESP8266 board. I'll recommend to use the ESP8266-based
 
 And after that, (hopefully) you're good to go. Hey, would be great if you can connect a temperature sensor as the sketch is about reading temperature data and publish it to Azure IoT Hub. I use BMP180 and [Adafruit's BMP085/BMP180 library](https://github.com/adafruit/Adafruit-BMP085-Library). You can change `#define USE_BMP180` from `1` to `0` if you don't have the sensor and let the random on your side.
 
+Or... get the sample project from [here](https://github.com/andriyadi/AzureIoTHubMQTTClientSample)
+
 Enjoy!
 
 
