@@ -41,7 +41,7 @@ void AzureIoTHubMQTTClient::onNTPSynced(NTPSyncEvent_t ntpEvent) {
 
     }
     else {
-        ntpSyncedFlag = true;
+        ntpSyncedFlag_ = true;
         DEBUGLOG("Got NTP time: ");
         DEBUGLOG("%s\n", NTP.getTimeDateString(NTP.getLastNTPSync()).c_str());
         NTP.setInterval(61);
@@ -68,9 +68,9 @@ bool AzureIoTHubMQTTClient::begin() {
 
 void AzureIoTHubMQTTClient::run() {
 
-    //if (ntpSyncedFlag || timeStatus() == timeSet) {
-    if (ntpSyncedFlag && currentEvent_ == AzureIoTHubMQTTClientEventNTPSynced) {
-        ntpSyncedFlag = false;
+    //if (ntpSyncedFlag_ || timeStatus() == timeSet) {
+    if (ntpSyncedFlag_ && currentEvent_ == AzureIoTHubMQTTClientEventNTPSynced) {
+        ntpSyncedFlag_ = false;
 
         if (!connected()) {
             doConnect();
@@ -85,7 +85,7 @@ void AzureIoTHubMQTTClient::run() {
     PubSubClient::loop();
 }
 
-void AzureIoTHubMQTTClient::stop() {
+void AzureIoTHubMQTTClient::end() {
     //ntpTrialCount_ = 0;
     disconnect();
     NTP.stop();

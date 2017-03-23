@@ -55,7 +55,7 @@ public:
 
     bool begin();
     void run();
-    void stop();
+    void end();
     bool sendEvent(String payload);
     bool sendEvent(const uint8_t *payload, uint32_t plength, bool retained = false);
     void sendEventWithKeyVal(KeyValueMap keyValMap);
@@ -76,7 +76,7 @@ private:
     String sasToken_;
     String mqttCommandSubscribeTopic_, mqttCommandPublishTopic_;
     PubSubClient::callback_t onSubscribeCallback_;
-    volatile bool ntpSyncedFlag = false;
+    volatile bool ntpSyncedFlag_ = false;
 
     bool parseMessageAsJson_ = false;
 

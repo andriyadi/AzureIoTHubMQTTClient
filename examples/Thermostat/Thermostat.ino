@@ -105,13 +105,13 @@ void setup() {
     client.onEvent(onClientEvent);
 
     //Add command to handle and its handler
-    //Command format is assumed like this: {"Name":"[COMMAND_NAME]","Parameters":[PARAMETERS_JSON]}
+    //Command format is assumed like this: {"Name":"[COMMAND_NAME]","Parameters":[PARAMETERS_JSON_ARRAY]}
     client.onCloudCommand("ActivateRelay", onActivateRelayCommand);
 }
 
 void onMessageCallback(const MQTT::Publish& msg) {
 
-    //Handle Cloud to Device message by your self.
+    //Handle Cloud to Device message by yourself.
 
 //    if (msg.payload_len() == 0) {
 //        return;
