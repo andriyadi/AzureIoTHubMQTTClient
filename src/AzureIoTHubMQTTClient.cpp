@@ -141,7 +141,7 @@ bool AzureIoTHubMQTTClient::doConnect() {
 
     changeEventTo(AzureIoTHubMQTTClientEventConnecting);
 
-    String mqttUname =  iotHubHostName_ + "/" + deviceId_ + "/DeviceClientType=0.1.0";
+    String mqttUname =  iotHubHostName_ + "/" + deviceId_ + "/api-version=2016-11-14";
     String mqttPassword = "SharedAccessSignature " + sasToken_;
     //DEBUGLOG(mqttPassword);
 
