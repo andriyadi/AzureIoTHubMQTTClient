@@ -14,43 +14,10 @@ AzureIoTHubMQTTClient::AzureIoTHubMQTTClient(Client& c, String iotHubHostName, S
 
     mqttCommandSubscribeTopic_ = "devices/" + deviceId + "/messages/devicebound/#";
     mqttCommandPublishTopic_ = "devices/" + deviceId + "/messages/events/";
-
-    using namespace std::placeholders;
-    NTP.onNTPSyncEvent(std::bind(&AzureIoTHubMQTTClient::onNTPSynced, this, _1));
 }
 
 AzureIoTHubMQTTClient::~AzureIoTHubMQTTClient() {
 
-}
-
-void AzureIoTHubMQTTClient::onNTPSynced(NTPSyncEvent_t ntpEvent) {
-    if (ntpEvent) {
-        DEBUGLOG("Time Sync error: ");
-        if (ntpEvent == noResponse) {
-            DEBUGLOG("NTP server not reachable\n");
-        }
-        else if (ntpEvent == invalidAddress) {
-            DEBUGLOG("Invalid NTP server address\n");
-        }
-
-        NTP.setInterval(5); //try again soon
-
-//        ntpTrialCount_++;
-//        if (ntpTrialCount_ > 3) {
-//        }
-
-    }
-    else {
-        ntpSyncedFlag_ = true;
-        DEBUGLOG("Got NTP time: ");
-        DEBUGLOG("%s\n", NTP.getTimeDateString(NTP.getLastNTPSync()).c_str());
-        NTP.setInterval(61);
-
-        changeEventTo(AzureIoTHubMQTTClientEventNTPSynced);
-
-    }
-
-    DEBUGLOG("Current timestamp: %d\n", now());
 }
 
 bool AzureIoTHubMQTTClient::begin() {
@@ -60,42 +27,27 @@ bool AzureIoTHubMQTTClient::begin() {
         return false;
     }
 
-    NTP.begin(NTP_DEFAULT_HOST);//, 1, true);
-    changeEventTo(AzureIoTHubMQTTClientEventNTPSyncing);
-
     return true;
 }
 
 void AzureIoTHubMQTTClient::run() {
 
-    //if (ntpSyncedFlag_ || timeStatus() == timeSet) {
-    if (ntpSyncedFlag_ && currentEvent_ == AzureIoTHubMQTTClientEventNTPSynced) {
-        ntpSyncedFlag_ = false;
-
-        if (!connected()) {
-            doConnect();
-        }
-    }
-    else {
-        if (currentEvent_ == AzureIoTHubMQTTClientEventNTPSyncing) {
-            timeStatus();
-        }
+    if (!connected()) {
+        doConnect();
     }
 
     PubSubClient::loop();
 }
 
 void AzureIoTHubMQTTClient::end() {
-    //ntpTrialCount_ = 0;
     disconnect();
-    NTP.stop();
 }
 
 String AzureIoTHubMQTTClient::createIotHubSASToken(char *key, String url, long expire){
 
     url.toLowerCase();
     if (expire == 0) {
-        expire = 1737504000; //hardcoded expire
+        expire = 2147483647; // hardcode expire to MAX unix timestamp
     }
 
     String stringToSign = url + "\n" + String(expire);
@@ -132,11 +84,8 @@ bool AzureIoTHubMQTTClient::doConnect() {
 
         String url = iotHubHostName_ + urlEncode(String("/devices/" + deviceId_).c_str());
         char *devKey = (char *)deviceKey_.c_str();
-        long expire = (timeStatus() == timeSet? now(): 0) + (AZURE_IOTHUB_TOKEN_EXPIRE);
-        DEBUGLOG("SAS Token expire: %d\n", expire);
 
-        //TODO: Store SAS token? So that no expensive operation for each begin
-        sasToken_ = createIotHubSASToken(devKey, url, expire);
+        sasToken_ = createIotHubSASToken(devKey, url, 0);
     }
 
     changeEventTo(AzureIoTHubMQTTClientEventConnecting);
@@ -240,10 +189,6 @@ void AzureIoTHubMQTTClient::_onActualMqttMessageCallback(const MQTT::Publish &ms
     if (onSubscribeCallback_) {
         onSubscribeCallback_(msg);
     }
-}
-
-bool AzureIoTHubMQTTClient::setTimeZone(int timeZone) {
-    return NTP.setTimeZone(timeZone);
 }
 
 void AzureIoTHubMQTTClient::onCloudCommand(String command,

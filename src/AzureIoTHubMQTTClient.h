@@ -24,10 +24,7 @@
 #define DEBUGLOG(...)
 #endif
 
-#include "NtpClientLib.h"
-
 #define MAX_JSON_OBJECT_SIZE 20
-#define NTP_DEFAULT_HOST     DEFAULT_NTP_SERVER //"time.nist.gov"//"pool.ntp.org"
 #define AZURE_IOTHUB_MQTT_PORT    8883
 #define AZURE_IOTHUB_TOKEN_EXPIRE   10*24*3600 //seconds
 
@@ -36,8 +33,6 @@ public:
 
     enum AzureIoTHubMQTTClientEvent {
         AzureIoTHubMQTTClientEventUnknown,
-        AzureIoTHubMQTTClientEventNTPSyncing,
-        AzureIoTHubMQTTClientEventNTPSynced,
         AzureIoTHubMQTTClientEventConnecting,
         AzureIoTHubMQTTClientEventConnected,
         AzureIoTHubMQTTClientEventDisconnected
@@ -59,7 +54,6 @@ public:
     bool sendEvent(String payload);
     bool sendEvent(const uint8_t *payload, uint32_t plength, bool retained = false);
     void sendEventWithKeyVal(KeyValueMap keyValMap);
-    bool setTimeZone(int timeZone);
 
     void onEvent(EventCallback cb) {
         eventCallback_ = cb;
@@ -76,7 +70,6 @@ private:
     String sasToken_;
     String mqttCommandSubscribeTopic_, mqttCommandPublishTopic_;
     PubSubClient::callback_t onSubscribeCallback_;
-    volatile bool ntpSyncedFlag_ = false;
 
     bool parseMessageAsJson_ = false;
 
@@ -86,8 +79,6 @@ private:
     bool doConnect();
     String createIotHubSASToken(char *key, String url, long expire = 0);
     void _onActualMqttMessageCallback(const MQTT::Publish& p);
-    void onNTPSynced(NTPSyncEvent_t ntpEvent);
-    //uint8_t ntpTrialCount_ = 0;
 
     AzureIoTHubMQTTClientEvent currentEvent_ = AzureIoTHubMQTTClientEventUnknown;
     void changeEventTo(AzureIoTHubMQTTClientEvent event);
