@@ -17,11 +17,6 @@
   "platforms": "espressif8266",
   "dependencies": [
     {
-      "name": "PubSubClient",
-      "authors": "Nick O'Leary",
-      "frameworks": "arduino"
-    },
-    {
       "name": "ArduinoJson",
       "authors": "Benoit Blanchon",
       "frameworks": "arduino"
