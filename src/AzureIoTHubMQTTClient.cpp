@@ -78,23 +78,12 @@ String AzureIoTHubMQTTClient::createIotHubSASToken(char *key, String url, long e
 }
 
 bool AzureIoTHubMQTTClient::doConnect() {
-
-    if (sasToken_.equals("")) {
-        DEBUGLOG("Creating SAS Token!\n");
-
-        String url = iotHubHostName_ + urlEncode(String("/devices/" + deviceId_).c_str());
-        char *devKey = (char *)deviceKey_.c_str();
-
-        sasToken_ = createIotHubSASToken(devKey, url, 0);
-    }
-
     changeEventTo(AzureIoTHubMQTTClientEventConnecting);
 
-    String mqttUname =  iotHubHostName_ + "/" + deviceId_ + "/api-version=2016-11-14";
-    String mqttPassword = "SharedAccessSignature " + sasToken_;
+    String mqttUname = iotHubHostName_ + "/" + deviceId_ + "/api-version=2016-11-14";
     //DEBUGLOG(mqttPassword);
 
-    MQTT::Connect conn = MQTT::Connect(deviceId_).set_auth(mqttUname, mqttPassword);//.set_clean_session();
+    MQTT::Connect conn = MQTT::Connect(deviceId_).set_auth(mqttUname, deviceKey_);//.set_clean_session();
     conn.set_keepalive(10);
     bool ret = PubSubClient::connect(conn);
 
