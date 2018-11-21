@@ -19,8 +19,7 @@
     {
       "name": "ArduinoJson",
       "authors": "Benoit Blanchon",
-      "frameworks": "arduino",
-      "platforms": "espressif8266"
+      "frameworks": "arduino"
     },
     {
       "name": "Time",
